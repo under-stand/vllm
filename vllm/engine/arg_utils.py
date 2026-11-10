@@ -622,6 +622,9 @@ class EngineArgs:
     max_num_seqs: int | None = None
     max_num_active_seqs: int | None = SchedulerConfig.max_num_active_seqs
     max_num_inflight_kv_loads: int | None = SchedulerConfig.max_num_inflight_kv_loads
+    max_async_kv_loads_per_step: int | None = (
+        SchedulerConfig.max_async_kv_loads_per_step
+    )
     max_num_queued_reqs: int | None = None
     max_num_queued_tokens: int | None = None
     max_logprobs: int = ModelConfig.max_logprobs
@@ -715,6 +718,9 @@ class EngineArgs:
     disable_chunked_mm_input: bool = SchedulerConfig.disable_chunked_mm_input
 
     scheduler_reserve_full_isl: bool = SchedulerConfig.scheduler_reserve_full_isl
+    scheduler_reserve_full_lifecycle: bool = (
+        SchedulerConfig.scheduler_reserve_full_lifecycle
+    )
     prefill_schedule_interval: int = SchedulerConfig.prefill_schedule_interval
     cache_aware_admission_window: int = SchedulerConfig.cache_aware_admission_window
     cache_aware_admission_threshold: float = (
@@ -1785,6 +1791,10 @@ class EngineArgs:
             **scheduler_kwargs["max_num_inflight_kv_loads"],
         )
         scheduler_group.add_argument(
+            "--max-async-kv-loads-per-step",
+            **scheduler_kwargs["max_async_kv_loads_per_step"],
+        )
+        scheduler_group.add_argument(
             "--max-num-queued-reqs", **scheduler_kwargs["max_num_queued_reqs"]
         )
         scheduler_group.add_argument(
@@ -1820,6 +1830,10 @@ class EngineArgs:
         scheduler_group.add_argument(
             "--scheduler-reserve-full-isl",
             **scheduler_kwargs["scheduler_reserve_full_isl"],
+        )
+        scheduler_group.add_argument(
+            "--scheduler-reserve-full-lifecycle",
+            **scheduler_kwargs["scheduler_reserve_full_lifecycle"],
         )
         scheduler_group.add_argument("--watermark", **scheduler_kwargs["watermark"])
         scheduler_group.add_argument(
@@ -2696,6 +2710,7 @@ class EngineArgs:
             max_num_seqs=self.max_num_seqs,
             max_num_active_seqs=self.max_num_active_seqs,
             max_num_inflight_kv_loads=self.max_num_inflight_kv_loads,
+            max_async_kv_loads_per_step=self.max_async_kv_loads_per_step,
             max_num_queued_reqs=self.max_num_queued_reqs,
             max_num_queued_tokens=self.max_num_queued_tokens,
             max_model_len=model_config.max_model_len,
@@ -2710,6 +2725,7 @@ class EngineArgs:
                 self.long_prefill_token_threshold_adaptive
             ),
             scheduler_reserve_full_isl=self.scheduler_reserve_full_isl,
+            scheduler_reserve_full_lifecycle=self.scheduler_reserve_full_lifecycle,
             watermark=self.watermark,
             prefill_schedule_interval=self.prefill_schedule_interval,
             cache_aware_admission_window=self.cache_aware_admission_window,

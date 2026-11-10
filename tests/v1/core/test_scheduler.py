@@ -58,7 +58,7 @@ from vllm.v1.core.sched.interface import PauseState
 from vllm.v1.core.sched.output import CachedRequestData, SchedulerOutput
 from vllm.v1.core.sched.scheduler import Scheduler
 from vllm.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
-from vllm.v1.engine import FinishReason
+from vllm.v1.engine import CheckpointState, FinishReason
 from vllm.v1.engine.core import EngineCore
 from vllm.v1.executor.uniproc_executor import UniProcExecutor
 from vllm.v1.hisparse.coordinator import get_hisparse_coordinator
@@ -1152,247 +1152,6 @@ def test_schedule_prefills_gating(has_running: bool):
     # No running work to protect (or cadence now open): the prefill is admitted.
     assert "new0" in output.num_scheduled_tokens
     assert any(r.req_id == "new0" for r in output.scheduled_new_reqs)
-
-
-def _decode_one(scheduler, output, req_ids: list[str]) -> None:
-    """Feed back one sampled token per request, so they keep decoding."""
-    scheduler.update_from_output(
-        output,
-        ModelRunnerOutput(
-            req_ids=req_ids,
-            sampled_token_ids=[[0] for _ in req_ids],
-            logprobs=None,
-            prompt_logprobs_dict={},
-            pooler_output=[],
-        ),
-    )
-
-
-def _start_decoding(scheduler, req_id: str = "run0"):
-    """Prefill one request and take it into the decode state."""
-    (request,) = create_requests(
-        num_requests=1, num_tokens=8, max_tokens=100, req_ids=[req_id]
-    )
-    scheduler.add_request(request)
-    output = scheduler.schedule()
-    assert req_id in output.num_scheduled_tokens
-    _decode_one(scheduler, output, [req_id])
-    assert len(scheduler.running) == 1
-    return output
-
-
-@pytest.mark.parametrize("interval", [2, 4])
-def test_local_prefill_interval_holds_prefill_between_bursts(interval: int):
-    """A single engine applies `prefill_schedule_interval` in the scheduler,
-    timed from the last prefill-carrying step: a waiting prefill is held for the
-    remainder of the interval while running requests keep decoding, then
-    admitted once the interval has elapsed.
-    """
-    scheduler = create_scheduler(prefill_schedule_interval=interval)
-    # This prefill starts the interval.
-    _start_decoding(scheduler)
-    assert scheduler.last_prefill_step == scheduler.num_executed_steps
-
-    (new_req,) = create_requests(num_requests=1, num_tokens=8, req_ids=["new0"])
-    scheduler.add_request(new_req)
-
-    # Steps inside the interval decode alone; the waiting prefill is held.
-    for _ in range(interval - 1):
-        output = scheduler.schedule()
-        assert "new0" not in output.num_scheduled_tokens
-        assert "run0" in output.num_scheduled_tokens
-        assert new_req.status == RequestStatus.WAITING
-        _decode_one(scheduler, output, ["run0"])
-
-    # The interval has now elapsed, so prefill is admitted again.
-    output = scheduler.schedule()
-    assert "new0" in output.num_scheduled_tokens
-    assert scheduler.last_prefill_step == scheduler.num_executed_steps
-
-
-def test_empty_schedule_does_not_advance_the_prefill_cadence():
-    """An empty schedule() must not consume interval budget.
-
-    `current_step` counts every schedule() call. With async scheduling,
-    step_with_batch_queue() calls schedule() again whenever the batch queue has
-    room and has_requests() is true -- so a call lands while the previous batch
-    is still in flight and nothing new can be scheduled. An async KV connector
-    makes this common, since requests sit in lookup or WAITING_FOR_REMOTE_KVS.
-    Timing the cadence on current_step lets those empty calls expire the hold
-    early. Reported on #54627 against the LMCache MP connector.
-    """
-    scheduler = create_scheduler(prefill_schedule_interval=4)
-    _start_decoding(scheduler)
-
-    # One real decode step, left in flight (no update_from_output yet).
-    output = scheduler.schedule()
-    assert output.total_num_scheduled_tokens > 0
-    executed_before = scheduler.num_executed_steps
-    step_before = scheduler.current_step
-
-    # Re-entering schedule() while that batch is still unaccounted for
-    # schedules nothing -- this is the async-scheduling shape.
-    for _ in range(3):
-        empty = scheduler.schedule()
-        assert empty.total_num_scheduled_tokens == 0
-
-    assert scheduler.current_step == step_before + 3, "current_step should advance"
-    assert scheduler.num_executed_steps == executed_before, (
-        "an empty schedule() must not count as an executed step"
-    )
-
-
-def test_prefill_cadence_counts_executed_steps_not_schedule_calls():
-    """The hold spans `interval` EXECUTED steps, however many empty schedule()
-    calls are interleaved.
-
-    Counting schedule() calls instead lets each empty call eat interval budget,
-    so with an async KV connector prefill lands on nearly every step and the
-    feature stops doing anything.
-    """
-    interval = 4
-    scheduler = create_scheduler(prefill_schedule_interval=interval)
-    _start_decoding(scheduler)
-    prefill_at = scheduler.num_executed_steps
-
-    (new_req,) = create_requests(num_requests=1, num_tokens=8, req_ids=["new0"])
-    scheduler.add_request(new_req)
-
-    empty_calls = 0
-    admitted_at = None
-    for _ in range(50):
-        output = scheduler.schedule()
-        if "new0" in output.num_scheduled_tokens:
-            admitted_at = scheduler.num_executed_steps
-            break
-        if output.total_num_scheduled_tokens == 0:
-            empty_calls += 1
-            continue
-        # A real decode step. Leave it in flight and re-enter schedule() twice,
-        # as async scheduling does while the batch queue has room.
-        for _ in range(2):
-            extra = scheduler.schedule()
-            if "new0" in extra.num_scheduled_tokens:
-                admitted_at = scheduler.num_executed_steps
-                break
-            empty_calls += 1
-        if admitted_at is not None:
-            break
-        _decode_one(scheduler, output, ["run0"])
-
-    assert admitted_at is not None, "prefill was never admitted"
-    assert empty_calls > 0, "test never exercised an empty schedule() call"
-    # The hold is measured in executed steps. Counting schedule() calls would
-    # admit after far fewer, because the empty re-entries above would count.
-    assert admitted_at - prefill_at == interval, (
-        f"hold lasted {admitted_at - prefill_at} executed steps, expected "
-        f"{interval}; empty schedule() calls were counted against the cadence"
-    )
-    assert scheduler.current_step > scheduler.num_executed_steps
-
-
-def test_local_prefill_interval_defaults_to_no_gating():
-    """The default interval of 1 leaves admission exactly as it was: a waiting
-    prefill is admitted on the very next step.
-    """
-    scheduler = create_scheduler()
-    assert scheduler.local_prefill_interval == 1
-    _start_decoding(scheduler)
-
-    (new_req,) = create_requests(num_requests=1, num_tokens=8, req_ids=["new0"])
-    scheduler.add_request(new_req)
-    output = scheduler.schedule()
-    assert "new0" in output.num_scheduled_tokens
-
-
-def test_local_prefill_interval_left_to_engine_under_dp():
-    """Under data parallelism the cadence must stay aligned across ranks, so the
-    DP engine core drives it and the scheduler must not gate on its own.
-    """
-    scheduler = create_scheduler(prefill_schedule_interval=4, data_parallel_size=2)
-    assert scheduler.local_prefill_interval == 1
-    _start_decoding(scheduler)
-
-    (new_req,) = create_requests(num_requests=1, num_tokens=8, req_ids=["new0"])
-    scheduler.add_request(new_req)
-    output = scheduler.schedule()
-    assert "new0" in output.num_scheduled_tokens
-
-
-def test_local_prefill_interval_never_idles_the_model():
-    """With nothing running to decode in prefill's place, the interval must not
-    hold prefill back, or the step would be wasted entirely.
-    """
-    scheduler = create_scheduler(prefill_schedule_interval=8)
-    _start_decoding(scheduler)
-
-    # Finish the only running request, leaving nothing to decode.
-    scheduler.finish_requests("run0", RequestStatus.FINISHED_ABORTED)
-    assert not scheduler.running
-
-    (new_req,) = create_requests(num_requests=1, num_tokens=8, req_ids=["new0"])
-    scheduler.add_request(new_req)
-    output = scheduler.schedule()
-    assert "new0" in output.num_scheduled_tokens
-
-
-@pytest.mark.parametrize("interval", [2, 3])
-def test_local_prefill_interval_defers_inflight_prefill_chunk(interval: int):
-    """The single-engine interval gates prefill WORK, not just new admissions.
-
-    A request that is already partially prefilled is held for the remainder of
-    the interval too, exactly as `throttle_prefills` does for DP. That is the
-    point of the cadence -- a held step must carry no prefill at all, or decode
-    does not get the uninterrupted stretch the interval exists to give it.
-    """
-    scheduler = create_scheduler(
-        max_num_seqs=16,
-        max_num_batched_tokens=50,
-        enable_chunked_prefill=True,
-        prefill_schedule_interval=interval,
-    )
-
-    # A short request that finishes prefill in one step -> a running decode.
-    (decode_req,) = create_requests(num_requests=1, num_tokens=4, req_ids=["dec0"])
-    scheduler.add_request(decode_req)
-    output = scheduler.schedule()
-    _decode_one(scheduler, output, ["dec0"])
-    assert decode_req in scheduler.running and not decode_req.is_prefill_chunk
-
-    # A long request (80 tokens, budget 50) -> prefilled in chunks. That first
-    # prefill closed the interval, so walk to the next step that opens it.
-    (chunk_req,) = create_requests(num_requests=1, num_tokens=80, req_ids=["chk0"])
-    scheduler.add_request(chunk_req)
-    for _ in range(interval - 1):
-        output = scheduler.schedule()
-        assert "chk0" not in output.num_scheduled_tokens
-        _decode_one(scheduler, output, ["dec0"])
-
-    output = scheduler.schedule()
-    assert output.num_scheduled_tokens["chk0"] > 0
-    scheduler.update_from_output(
-        output,
-        ModelRunnerOutput(
-            req_ids=["dec0", "chk0"],
-            sampled_token_ids=[[0], []],  # no token sampled for partial prefill
-            logprobs=None,
-            prompt_logprobs_dict={},
-            pooler_output=[],
-        ),
-    )
-    assert chunk_req.is_prefill_chunk  # still mid-prefill, in running
-
-    # Held steps: the in-flight chunk is deferred along with new admissions,
-    # while the decode keeps running.
-    for _ in range(interval - 1):
-        output = scheduler.schedule()
-        assert "chk0" not in output.num_scheduled_tokens
-        assert "dec0" in output.num_scheduled_tokens
-        _decode_one(scheduler, output, ["dec0"])
-
-    # Once the interval has elapsed the chunk resumes.
-    output = scheduler.schedule()
-    assert "chk0" in output.num_scheduled_tokens
 
 
 def _setup_cache_aware(num_tokens: int = 48, **kwargs):
@@ -2613,6 +2372,102 @@ def test_preempt_during_execution():
     assert requests[1].output_token_ids[0] == 42
 
 
+def _step_scheduler(scheduler: Scheduler) -> SchedulerOutput:
+    """Run one scheduler step, sampling one token when the step is not a chunk."""
+    scheduler_output = scheduler.schedule()
+    if scheduler_output.total_num_scheduled_tokens == 0:
+        return scheduler_output
+    req_ids = list(scheduler_output.num_scheduled_tokens)
+    sampled_token_ids: list[list[int]] = []
+    for req_id in req_ids:
+        request = scheduler.requests[req_id]
+        if request.is_prefill_chunk:
+            sampled_token_ids.append([])
+        else:
+            sampled_token_ids.append([7])
+    scheduler.update_from_output(
+        scheduler_output,
+        ModelRunnerOutput(
+            req_ids=req_ids,
+            sampled_token_ids=sampled_token_ids,
+            logprobs=None,
+            prompt_logprobs_dict={},
+            pooler_output=[],
+        ),
+    )
+    return scheduler_output
+
+
+@pytest.mark.parametrize("reserve_lifecycle", [False, True])
+def test_lifecycle_kv_admission_stops_preemption_churn(reserve_lifecycle: bool):
+    """ISL admission fits prompts that cannot all reach max_tokens.
+
+    Pool: 7 blocks, 1 null, so 6 usable. block_size=4.
+    Each request is 8 prompt + 8 max_tokens = 16 tokens = 4 blocks.
+    Two peaks are 8 blocks > 6, but two prompts are 4 blocks <= 6.
+    After the first prompt is allocated (2 blocks), 4 blocks are free, which
+    is exactly the second request's peak — a check against free blocks alone
+    would admit it, while the running request still needs 2 more blocks.
+    """
+    block_size = 4
+    num_prompt_tokens = 8
+    max_tokens = 8
+    peak_blocks = (num_prompt_tokens + max_tokens + block_size - 1) // block_size
+    scheduler = create_scheduler(
+        max_num_seqs=4,
+        max_num_batched_tokens=32,
+        max_model_len=64,
+        block_size=block_size,
+        num_blocks=7,
+        enable_prefix_caching=False,
+        scheduler_reserve_full_lifecycle=reserve_lifecycle,
+    )
+    assert scheduler.scheduler_reserve_full_lifecycle is reserve_lifecycle
+    assert scheduler.kv_cache_manager.block_pool.get_num_free_blocks() == 6, (
+        "block 0 is the null block"
+    )
+    requests = create_requests(
+        num_requests=2,
+        num_tokens=num_prompt_tokens,
+        max_tokens=max_tokens,
+        block_size=block_size,
+    )
+    for request in requests:
+        scheduler.add_request(request)
+
+    _step_scheduler(scheduler)
+    free_blocks = scheduler.kv_cache_manager.block_pool.get_num_free_blocks()
+    if reserve_lifecycle:
+        assert len(scheduler.running) == 1
+        assert len(scheduler.waiting) == 1
+        # The second peak fits in the free pool; the ledger is what rejects it.
+        assert free_blocks >= peak_blocks
+        max_running = 1
+        for _ in range(40):
+            if all(request.is_finished() for request in requests):
+                break
+            _step_scheduler(scheduler)
+            max_running = max(max_running, len(scheduler.running))
+        assert all(request.is_finished() for request in requests)
+        assert [request.num_output_tokens for request in requests] == [
+            max_tokens,
+            max_tokens,
+        ]
+        assert sum(request.num_preemptions for request in requests) == 0
+        assert max_running == 1
+    else:
+        assert len(scheduler.running) == 2
+        preempted = False
+        for _ in range(40):
+            if any(request.num_preemptions for request in requests):
+                preempted = True
+                break
+            output = _step_scheduler(scheduler)
+            if output.total_num_scheduled_tokens == 0 and not scheduler.running:
+                break
+        assert preempted
+
+
 def test_pending_hisparse_reclamation_defers_preemption(monkeypatch):
     """Pending reclamation must stall rather than preempt its owning request."""
     scheduler = create_scheduler(enable_prefix_caching=False)
@@ -2888,6 +2743,8 @@ def test_kv_cache_release_after_keep_pause_preserves_requests():
     assert scheduler.kv_cache_manager.get_block_ids(running.request_id)[0]
 
     core = object.__new__(EngineCore)
+    core._checkpoint_state = CheckpointState.RUNNING
+    core._kv_cache_reclaimable = False
     core.scheduler = scheduler
     core.model_executor = Mock(is_sleeping=False)
     core.mm_receiver_cache = None
@@ -2924,6 +2781,8 @@ def test_pause_that_clears_the_kv_cache_lets_weight_updates_borrow_it(extensible
     from types import SimpleNamespace
 
     core = object.__new__(EngineCore)
+    core._checkpoint_state = CheckpointState.RUNNING
+    core._kv_cache_reclaimable = False
     core.scheduler = create_scheduler()
     core.mm_receiver_cache = None
     core.batch_queue = None

@@ -232,9 +232,8 @@ class Scheduler(SchedulerInterface):
         # self.waiting: a block-holder must never sit behind a request whose
         # failed allocation would stop the scheduling scan.
         self.kv_holding_waiting = create_request_queue(self.policy)
-        # With --max-num-inflight-kv-loads, requests that may load KV async but
-        # haven't started, kept apart so their loads can start while the batch
-        # is full without scanning past requests that need a running slot.
+        # With either async-load limit, keep requests that may load KV async
+        # separate so throttling their loads doesn't block local requests.
         self.async_kv_waiting = create_request_queue(self.policy)
         # Waiting requests that are deferred, i.e. were skipped by the scheduling
         # scan or enqueued in a blocked status.
@@ -392,39 +391,20 @@ class Scheduler(SchedulerInterface):
         # prefill batch fully drained the waiting queue. Prefill throttling
         # is disabled in this case.
         self.prefill_capacity_bound = False
-        # The DP engine core drives this cadence from a counter shared across
-        # ranks; an engine without one never throttles, so apply the interval
-        # locally, timed from the last prefill-carrying step. Three regimes:
-        #   1. no DP -- local cadence applies;
-        #   2. dense DP rank -- `reconfigure_for_independent_dp_rank` already
-        #      set data_parallel_size=1, so each rank gets its own cadence.
-        #      Intended, but a behaviour change: this used to be a no-op;
-        #   3. MoE DP rank (size > 1) -- the engine core drives it, no-op here.
-        self.local_prefill_interval = (
-            self.scheduler_config.prefill_schedule_interval
-            if self.parallel_config.data_parallel_size == 1
-            else 1
-        )
-        if self.local_prefill_interval > 1:
-            # Neither the hold nor its release is otherwise visible in logs or
-            # stats, which makes a misapplied cadence hard to diagnose.
-            logger.info_once(
-                "Prefill cadence: applying prefill_schedule_interval=%d "
-                "locally (this engine is not DP-coordinated); prefill is held "
-                "until %d executed steps have passed since the last "
-                "prefill-carrying step.",
-                self.local_prefill_interval,
-                self.local_prefill_interval,
-            )
-        # A full interval back, so the first step is never gated.
-        self.last_prefill_step = -self.local_prefill_interval
-        # Steps that actually scheduled tokens. `current_step` counts every
-        # schedule() call including empty ones, so it would expire the hold
-        # early; it keeps its own meaning (next_decode_eligible_step).
-        self.num_executed_steps = 0
         self.scheduler_reserve_full_isl = (
             self.scheduler_config.scheduler_reserve_full_isl
         )
+        self.scheduler_reserve_full_lifecycle = (
+            self.scheduler_config.scheduler_reserve_full_lifecycle
+        )
+        if self.scheduler_reserve_full_lifecycle:
+            logger.info_once(
+                "Lifecycle KV admission is enabled. A waiting request is "
+                "admitted only when its prompt + max_tokens, plus the "
+                "unallocated peak of requests already in the pool, fits in "
+                "the free KV blocks. Generous max_tokens reserves idle "
+                "capacity."
+            )
         # Cache-aware admission needs a prefix cache to consult, and reorders by
         # position, which only a FCFS queue has.
         self.cache_aware_window = (
@@ -504,6 +484,10 @@ class Scheduler(SchedulerInterface):
         self._inflight_prefills: set[Request] = set()
         self._parked_reservations: dict[Request, int] = {}
         self._parked_reserved_blocks = 0
+        # Peak (prompt + max_tokens) reservations for parked loads. Separate
+        # from `_parked_reserved_blocks`, which tracks the current sequence.
+        self._parked_lifecycle_reservations: dict[Request, int] = {}
+        self._parked_lifecycle_blocks = 0
 
         # Requests with an async KV load, by stage (KV_FETCH_STAGES).
         # None when not tracked (no KV connector, or no stats or load cap).
@@ -750,9 +734,6 @@ class Scheduler(SchedulerInterface):
         drafts_needed = not self.can_skip_drafts
         # Whether the running batch contains any prefill requests.
         prefill_scheduled = False
-        # Whether a waiting request was admitted with prompt left to compute.
-        # Separate from `prefill_scheduled`, which covers only the running loop.
-        prefill_admitted = False
         # Whether any scheduled request has a synchronous connector KV load.
         has_sync_kv_loads = False
 
@@ -783,28 +764,6 @@ class Scheduler(SchedulerInterface):
             long_prefill_token_threshold = max(
                 long_prefill_token_threshold, input_budget // num_eligible_reqs
             )
-
-        # Local prefill cadence: hold prefill until the interval since the last
-        # prefill-carrying step has elapsed, so decode runs in longer
-        # uninterrupted stretches. Mirrors the DP gate above, including its
-        # capacity escape: once a release step cannot drain the waiting queue,
-        # throttling stops (#44558, test_throttle_capacity_bound_guard_admits).
-        # Without that escape a backed-up engine holds both admissions and
-        # in-flight chunks for interval-1 of every interval steps, capping
-        # prefill at roughly one budget per interval and growing the waiting
-        # queue without bound.
-        if (
-            not defer_prefills
-            and self.local_prefill_interval > 1
-            and not self.prefill_capacity_bound
-            # This call becomes executed step num_executed_steps + 1 if it
-            # schedules anything, and last_prefill_step is stamped on the same
-            # convention below.
-            and (self.num_executed_steps + 1) - self.last_prefill_step
-            < self.local_prefill_interval
-            and any(not r.is_prefill_chunk for r in self.running)
-        ):
-            defer_prefills = True
 
         # First, schedule the RUNNING requests.
         req_index = 0
@@ -1086,6 +1045,10 @@ class Scheduler(SchedulerInterface):
                 else:
                     step_skipped_waiting.appendleft(request_to_skip)
 
+            num_async_kv_loads = 0
+            max_async_kv_loads = (
+                self.scheduler_config.max_async_kv_loads_per_step or float("inf")
+            )
             # Cleared once self.async_kv_waiting's head can't start a load.
             take_async_kv = True
             while True:
@@ -1101,7 +1064,11 @@ class Scheduler(SchedulerInterface):
                     request_queue = self.kv_holding_waiting
                     if not request_queue and self._pause_state == PauseState.UNPAUSED:
                         request_queue = self._next_waiting_queue(take_async_kv)
-                elif take_async_kv and self._pause_state == PauseState.UNPAUSED:
+                elif (
+                    take_async_kv
+                    and self.scheduler_config.max_num_inflight_kv_loads
+                    and self._pause_state == PauseState.UNPAUSED
+                ):
                     # No running slot or token budget left: start async KV loads
                     # only, which take neither until their KV has arrived.
                     request_queue = self.async_kv_waiting
@@ -1322,12 +1289,15 @@ class Scheduler(SchedulerInterface):
                 # has arrived (_update_waiting_for_remote_kv).
                 num_replay_tokens = 0
 
-                if (load_kv_async and not self._admits_inflight_kv_load()) or (
-                    loads_only and not load_kv_async
-                ):
-                    # Past --max-num-inflight-kv-loads, or needs a running slot
-                    # while none is free. It waits at the head of its queue;
-                    # other queues may still admit.
+                if (
+                    load_kv_async
+                    and (
+                        num_async_kv_loads >= max_async_kv_loads
+                        or not self._admits_inflight_kv_load()
+                    )
+                ) or (loads_only and not load_kv_async):
+                    # Past an async KV load limit, or needs a running slot while none
+                    # is free. It waits at the head of its queue; others may admit.
                     if request_queue is not self.async_kv_waiting:
                         break
                     take_async_kv = False
@@ -1491,6 +1461,23 @@ class Scheduler(SchedulerInterface):
                         + self._spec_decode_step_blocks
                     )
 
+                lifecycle_main_tokens = None
+                lifecycle_slot_tokens = None
+                lifecycle_reserved_blocks = 0
+                lifecycle_encoder_tokens = 0
+                if self.scheduler_reserve_full_lifecycle:
+                    # Same spec headroom as `_request_remaining_blocks`.
+                    lifecycle_main_tokens = self._lifecycle_main_tokens(request)
+                    lifecycle_slot_tokens = lifecycle_main_tokens
+                    if self.num_spec_tokens:
+                        lifecycle_slot_tokens += (
+                            1 + self.num_spec_tokens + self.num_lookahead_tokens
+                        )
+                    lifecycle_reserved_blocks = self._lifecycle_reserved_blocks(
+                        excluding=request
+                    )
+                    lifecycle_encoder_tokens = self._lifecycle_encoder_tokens(request)
+
                 # Replayed tokens are already counted in the adopted hit; a
                 # chunk that ends inside the replayed range needs no new slots.
                 num_tokens_past_hit = max(num_new_tokens - num_replay_tokens, 0)
@@ -1511,6 +1498,10 @@ class Scheduler(SchedulerInterface):
                     full_sequence_must_fit=self.scheduler_reserve_full_isl,
                     reserved_blocks=reserved_blocks,
                     has_scheduled_reqs=bool(self.running),
+                    lifecycle_main_tokens=lifecycle_main_tokens,
+                    lifecycle_slot_tokens=lifecycle_slot_tokens,
+                    lifecycle_reserved_blocks=lifecycle_reserved_blocks,
+                    lifecycle_encoder_tokens=lifecycle_encoder_tokens,
                 )
 
                 if new_blocks is None:
@@ -1574,15 +1565,10 @@ class Scheduler(SchedulerInterface):
                     )
 
                 if load_kv_async:
-                    # This path deliberately does not reach `prefill_admitted`
-                    # below, so it does not restart the prefill cadence:
-                    # `num_new_tokens` was set to 0 above, so the step carries
-                    # no prefill compute for this request. The interval is
-                    # timed from steps that actually prefilled; refreshing it
-                    # here would start the cadence from a step that did none.
                     # If loading async, allocate memory and put request
                     # into the WAITING_FOR_REMOTE_KV state.
                     request.status = RequestStatus.WAITING_FOR_REMOTE_KVS
+                    num_async_kv_loads += 1
                     # Set num_computed_tokens even though KVs are not yet loaded.
                     # request.num_computed_tokens will not be used anywhere until
                     # the request finished the KV transfer.
@@ -1644,14 +1630,6 @@ class Scheduler(SchedulerInterface):
                     scheduled_spec_decode_tokens[request_id] = [
                         -1
                     ] * self.num_spec_tokens
-                # Must use the SAME predicate as the deferral gate in the
-                # waiting loop (`num_computed_tokens < num_tokens - 1`).
-                # Stamping on `< num_prompt_tokens` instead let a request with
-                # exactly one token left pass the gate on a held step and still
-                # restart the interval -- which is every full prefix-cache hit,
-                # and every remote-KV resume, since those set
-                # num_computed_tokens = num_tokens - 1.
-                prefill_admitted |= num_computed_tokens < request.num_tokens - 1
                 # Track requests still prefilling after this chunk. A promoted load
                 # also stays tracked until _update_after_schedule drops it.
                 if (
@@ -1691,15 +1669,6 @@ class Scheduler(SchedulerInterface):
         # Check if the scheduling constraints are satisfied.
         total_num_scheduled_tokens = sum(num_scheduled_tokens.values())
         assert total_num_scheduled_tokens <= self.max_num_scheduled_tokens
-        # Count this step before stamping the cadence below, so that
-        # last_prefill_step includes the step that carried the prefill.
-        if total_num_scheduled_tokens > 0:
-            self.num_executed_steps += 1
-
-        # Restart the cadence interval from any step that carried prefill,
-        # whether a new admission or a running chunk.
-        if self.local_prefill_interval > 1 and (prefill_scheduled or prefill_admitted):
-            self.last_prefill_step = self.num_executed_steps
 
         assert token_budget >= 0
         assert input_budget >= 0
@@ -2780,7 +2749,10 @@ class Scheduler(SchedulerInterface):
             self.kv_holding_waiting.add_request(request)
         elif (
             self.connector is not None
-            and self.scheduler_config.max_num_inflight_kv_loads
+            and (
+                self.scheduler_config.max_num_inflight_kv_loads
+                or self.scheduler_config.max_async_kv_loads_per_step
+            )
             and self.connector.may_load_async(request)
         ):
             self.async_kv_waiting.add_request(request)
@@ -3535,9 +3507,21 @@ class Scheduler(SchedulerInterface):
             )
         return delay_free or partial_tail_delay, kv_xfer_params
 
-    def _request_remaining_blocks(self, request: Request) -> int:
-        """Blocks `request` still needs to hold its full sequence and be promoted."""
-        full_num_tokens = min(request.num_tokens, self.max_model_len)
+    def _request_remaining_blocks(
+        self,
+        request: Request,
+        full_num_tokens: int | None = None,
+        num_encoder_tokens: int = 0,
+    ) -> int:
+        """Blocks `request` still needs to hold `full_num_tokens` and be promoted.
+
+        `full_num_tokens` defaults to the tokens the request currently has
+        (the prompt, until decode appends output). Callers that reserve a
+        lifecycle peak pass prompt + max_tokens instead.
+        """
+        if full_num_tokens is None:
+            full_num_tokens = request.num_tokens
+        full_num_tokens = min(full_num_tokens, self.max_model_len)
         num_tokens = full_num_tokens
         if self.num_spec_tokens:
             num_tokens += 1 + self.num_spec_tokens + self.num_lookahead_tokens
@@ -3545,13 +3529,74 @@ class Scheduler(SchedulerInterface):
             request_id=request.request_id,
             num_tokens=num_tokens,
             new_computed_blocks=self.kv_cache_manager.empty_kv_cache_blocks.blocks,
-            num_encoder_tokens=0,
+            num_encoder_tokens=num_encoder_tokens,
             total_computed_tokens=request.num_computed_tokens,
             num_local_computed_tokens=request.num_computed_tokens,
             num_tokens_main_model=full_num_tokens,
             apply_admission_cap=True,
             prefill_end=max(request.num_prompt_tokens, request.num_tokens - 1),
         )
+
+    def _lifecycle_main_tokens(self, request: Request) -> int:
+        """Sampling cap for `request`: prompt + max_tokens, at least the tokens
+        it already holds, and never past max_model_len."""
+        return min(
+            max(request.num_prompt_tokens + request.max_tokens, request.num_tokens),
+            self.max_model_len,
+        )
+
+    def _lifecycle_encoder_tokens(self, request: Request) -> int:
+        if not (self.is_encoder_decoder and request.has_encoder_inputs):
+            return 0
+        return sum(
+            request.get_num_encoder_embeds(i) for i in range(request.num_encoder_inputs)
+        )
+
+    def _lifecycle_reserved_blocks(self, excluding: Request | None = None) -> int:
+        """Blocks still required for other requests already in the pool to reach
+        prompt + max_tokens. Each request is counted once. Parked async loads
+        use the reservation cached when they were parked.
+
+        `excluding` is the request being admitted. A parked load is still in
+        the cache until allocation succeeds, and its own peak is computed
+        separately inside `allocate_slots`.
+        """
+        reserved = self._parked_lifecycle_blocks
+        if excluding is not None:
+            reserved -= self._parked_lifecycle_reservations.get(excluding, 0)
+        seen: set[str] = set()
+        for request in self.running:
+            if request is excluding:
+                continue
+            seen.add(request.request_id)
+            reserved += self._request_remaining_blocks(
+                request,
+                full_num_tokens=self._lifecycle_main_tokens(request),
+                num_encoder_tokens=self._lifecycle_encoder_tokens(request),
+            )
+        for request in self._inflight_prefills:
+            if (
+                request is excluding
+                or request.request_id in seen
+                or request in self._parked_reservations
+            ):
+                continue
+            reserved += self._request_remaining_blocks(
+                request,
+                full_num_tokens=self._lifecycle_main_tokens(request),
+                num_encoder_tokens=self._lifecycle_encoder_tokens(request),
+            )
+        return reserved
+
+    def _cache_parked_lifecycle(self, request: Request) -> None:
+        blocks = self._request_remaining_blocks(
+            request,
+            full_num_tokens=self._lifecycle_main_tokens(request),
+            num_encoder_tokens=self._lifecycle_encoder_tokens(request),
+        )
+        cached = self._parked_lifecycle_reservations.get(request, 0)
+        self._parked_lifecycle_blocks += blocks - cached
+        self._parked_lifecycle_reservations[request] = blocks
 
     def _set_kv_fetch_stage(self, request: Request, stage: str | None) -> None:
         kv_fetch_stages = self._kv_fetch_stages
@@ -3580,9 +3625,14 @@ class Scheduler(SchedulerInterface):
         cached = self._parked_reservations.get(request, 0)
         self._parked_reserved_blocks += blocks - cached
         self._parked_reservations[request] = blocks
+        if self.scheduler_reserve_full_lifecycle:
+            self._cache_parked_lifecycle(request)
 
     def _unreserve_parked(self, request: Request) -> None:
         self._parked_reserved_blocks -= self._parked_reservations.pop(request, 0)
+        self._parked_lifecycle_blocks -= self._parked_lifecycle_reservations.pop(
+            request, 0
+        )
 
     def _load_restores_replay_window(self, request: Request) -> bool:
         """Whether the KV connector's load for `request` restores every DSV41

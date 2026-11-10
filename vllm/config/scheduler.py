@@ -87,6 +87,20 @@ class SchedulerConfig:
     and loads start only when a running slot is free.
     """
 
+    max_async_kv_loads_per_step: int | None = Field(default=None, ge=1)
+    """Maximum number of async KV connector loads (e.g. a P/D NIXL pull) that
+    start in one scheduling step. Each start allocates KV blocks for the whole
+    prompt on the main thread, and with data parallelism every rank waits for the
+    slowest step. `max_num_inflight_kv_loads` bounds how many loads are held;
+    this bounds how fast they start. `None` (default) means no limit.
+
+    Requests identified by the connector as async loads wait separately, so
+    this limit does not block ordinary waiting requests. Starting loads while
+    the running batch is full still requires `max_num_inflight_kv_loads`.
+
+    **Experimental**: this option may be changed or removed in a future release.
+    """
+
     long_prefill_token_threshold: int = Field(default=0, ge=0)
     """For chunked prefill, a request is considered long if the prompt is
     longer than this number of tokens. 0 disables the cap (default).
@@ -203,7 +217,24 @@ class SchedulerConfig:
     """If True, the scheduler checks whether the full input sequence length
     fits in the KV cache before admitting a new request, rather than only
     checking the first chunk. Prevents over-admission and KV cache thrashing
-    with chunked prefill."""
+    with chunked prefill. This reserves the prompt only; output tokens are
+    not included. See `scheduler_reserve_full_lifecycle`."""
+
+    scheduler_reserve_full_lifecycle: bool = False
+    """If True, admit a waiting request only when its full lifecycle fits.
+
+    The check is prompt tokens + `max_tokens` for the new request, plus the
+    blocks requests already in the pool still need to reach their own
+    prompt + `max_tokens`, against the free KV pool. Blocks are not allocated
+    ahead of time; admission is refused when decode would otherwise have to
+    preempt to make room for that growth.
+
+    This is off by default. `max_tokens` is an upper bound, and a request
+    that omits it is allowed to generate until `max_model_len`, so enabling
+    the check can leave most of the KV pool idle on chat workloads. Enable
+    it when `max_tokens` is close to the real output length and
+    `max_num_seqs` is above the number of full sequences the pool can hold.
+    `--scheduler-reserve-full-isl` still applies when this is left off."""
 
     watermark: float = Field(default=0.0, ge=0.0, lt=1.0)
     """Fraction of total KV cache blocks to keep free (the watermark) when
@@ -323,6 +354,7 @@ class SchedulerConfig:
             "scheduler_cls",
             "disable_hybrid_kv_cache_manager",
             "scheduler_reserve_full_isl",
+            "scheduler_reserve_full_lifecycle",
             "watermark",
             "prefill_schedule_interval",
             "async_scheduling",
