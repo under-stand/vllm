@@ -1,0 +1,146 @@
+/tmp/vllm-pr69299/vllm/__init__.py:7: RuntimeWarning: Failed to read commit hash:
+No module named 'vllm._version'
+  from .version import __version__, __version_tuple__  # isort:skip
+Module torchcodec.decoders was found but failed to import
+Traceback (most recent call last):
+  File "/tmp/vllm-pr69299/vllm/utils/import_utils.py", line 413, in _has_module
+    if importlib.util.find_spec(module_name) is None:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib.util>", line 92, in find_spec
+ModuleNotFoundError: No module named 'torchcodec'
+Failed to import from vllm._C: ModuleNotFoundError("No module named 'vllm._C'")
+Could not retrieve safetensors metadata for facebook/opt-125m (Hub fetch failed and the cached snapshot holds no weights yet).
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Failing 1 request(s) due to KV load failure (failure_policy=fail, 64 tokens affected). Request IDs: {'id-3'}
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Recovered from KV load failure: 1 request(s) rescheduled (64 tokens affected).
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Failing 1 request(s) due to KV load failure (failure_policy=fail, 64 tokens affected). Request IDs: {'id-11'}
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Failing 1 request(s) due to KV load failure (failure_policy=fail, 64 tokens affected). Request IDs: {'id-17'}
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Failed to reset prefix cache because some blocks (8) are not freed yet
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Failing 1 request(s) due to KV load failure (failure_policy=fail, 64 tokens affected). Request IDs: {'id-32'}
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Recovered from KV load failure: 1 request(s) rescheduled (64 tokens affected).
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Recovered from KV load failure: 1 request(s) rescheduled (64 tokens affected).
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Failed to reset prefix cache because some blocks (8) are not freed yet
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.
+Recovered from KV load failure: 1 request(s) rescheduled (64 tokens affected).
+CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized.
+Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+Turning off hybrid kv cache manager because `--kv-transfer-config` selects a KV connector that does not support it. Impact: hybrid SSM models (e.g. Jamba, Bamba) require HMA and will fail at startup without it; models with sliding window attention will run with reduced performance. To add HMA support to a KV connector, subclass `SupportsHMA` defined in kv_connector/v1/base.py (for MultiConnector, all child connectors must support HMA).
+Initializing KVConnectorBase_V1. This API is experimental and subject to change in the future as we iterate the design.

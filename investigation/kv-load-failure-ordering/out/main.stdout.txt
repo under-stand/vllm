@@ -1,0 +1,65 @@
+scheduler_module /workspace/vllm/v1/core/sched/scheduler.py
+scenario                             pol       load  sched role         defer hash_before hash_after status           reuse resume verdict
+control_local_prefix_hit             fail      none  sync  kv_consumer  False HHHHHHHH   HHHHHHHH   RUNNING            112   None control_ok
+  note: No external load. A second identical prompt must hit local KV.
+control_visible_fail_evicts          fail      sync  sync  kv_consumer  False HHHHHHHH   HHH-----   FINISHED_ERROR      48   None control_ok
+  note: Owner is still running when the failure report arrives and policy is fail. Existing handler should evict the suffix and fail the owner.
+visible_recompute_no_abort           recompute sync  sync  kv_consumer  False HHHHHHHH   HHHHHHHH   RUNNING            112   None suffix_still_cached
+  note: Failure while the owner is alive under recompute, no abort. reuse_hit is get_computed_blocks of another same-prefix request and does not allocate. Main historically keeps the suffix hashed so a live owner can repair it; #69299 evicts it immediately.
+control_success_then_abort           fail      sync  sync  kv_consumer  False HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None control_ok
+  note: Successful sync load, then abort. Valid KV must stay reusable.
+control_success_then_abort           fail      sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None control_ok
+  note: Successful sync load, then abort. Valid KV must stay reusable.
+failure_then_abort                   fail      sync  sync  kv_consumer  False HHHHHHHH   HHH-----   FINISHED_ERROR      48   None held
+  note: Failure report is applied while the owner is still running, then the owner is aborted if the fail policy did not already finish it.
+abort_then_failure                   fail      sync  sync  kv_consumer  False HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None violated
+  note: finish_requests(ABORTED) runs before update_from_output, matching EngineCore applying the abort queue before the failure report.
+preempt_direct_then_failure          fail      sync  sync  kv_producer  False HHHHHHHH   HHHHHHHH   PREEMPTED          112    128 violated
+  note: Owner is popped from running and _preempt_request is called, the same call schedule() makes, before the failure report. reuse_hit is get_computed_blocks before resume. resume_hit is that resume. No second external grant is offered.
+failure_then_abort                   fail      sync  async kv_consumer  True  HHHHHHHH   HHH-----   FINISHED_ERROR      48   None held
+  note: Failure report is applied while the owner is still running, then the owner is aborted if the fail policy did not already finish it.
+abort_then_failure                   fail      sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None violated
+  note: finish_requests(ABORTED) runs before update_from_output, matching EngineCore applying the abort queue before the failure report.
+preempt_direct_then_failure          fail      sync  async kv_producer  False HHHHHHHH   HHHHHHHH   PREEMPTED          112    128 violated
+  note: Owner is popped from running and _preempt_request is called, the same call schedule() makes, before the failure report. reuse_hit is get_computed_blocks before resume. resume_hit is that resume. No second external grant is offered.
+pressure_schedule_then_failure       fail      sync  async kv_producer  False HHHHHHHH   HHHHHHHH   PREEMPTED          112    112 violated
+  note: second schedule preempted=True scheduled=[] free_blocks=8
+pressure_schedule_then_failure       fail      sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   RUNNING           None   None not_reached
+  note: second schedule preempted=False scheduled=[] free_blocks=0
+reset_running_then_failure           fail      sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   PREEMPTED          112    112 violated
+  note: reset_prefix_cache(reset_running_requests=True) is the public preemption path. reset_raised=RuntimeError: Failed to reset KV cache even when all the running requests are preempted and moved to the waiting queue. This is likely due to the presence of running requests waiting for remote KV transfer, which is not supported yet.. EngineCore.reset_prefix_cache does not catch this exception; preemption has already run. The probe continues, as a caller that observes the failed RPC would.
+reset_running_then_failure           fail      sync  sync  kv_producer  False HHHHHHHH   --------   PREEMPTED            0      0 not_applicable_reset_cleared
+  note: reset_prefix_cache(reset_running_requests=True) is the public preemption path. reset_returned=True. EngineCore.reset_prefix_cache does not catch this exception; preemption has already run. The probe continues, as a caller that observes the failed RPC would.
+reset_running_then_failure           fail      sync  sync  kv_consumer  False HHHHHHHH   --------   PREEMPTED            0      0 not_applicable_reset_cleared
+  note: reset_prefix_cache(reset_running_requests=True) is the public preemption path. reset_returned=True. EngineCore.reset_prefix_cache does not catch this exception; preemption has already run. The probe continues, as a caller that observes the failed RPC would.
+async_failure_while_waiting          fail      async sync  kv_consumer  False -------    -------    FINISHED_ERROR       0   None not_applicable_async_uncached
+  note: owner_status_after_schedule=WAITING_FOR_REMOTE_KVS computed_before_report=112 Async load uses delay_cache_blocks, so schedule does not publish prefix hashes.
+async_abort_then_failure             fail      async sync  kv_consumer  False -------    -------    FINISHED_ABORTED     0   None not_applicable_async_uncached
+  note: owner_status_after_schedule=WAITING_FOR_REMOTE_KVS computed_before_report=112
+failure_then_abort                   recompute sync  sync  kv_consumer  False HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None violated
+  note: Failure report is applied while the owner is still running, then the owner is aborted if the fail policy did not already finish it.
+abort_then_failure                   recompute sync  sync  kv_consumer  False HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None violated
+  note: finish_requests(ABORTED) runs before update_from_output, matching EngineCore applying the abort queue before the failure report.
+preempt_direct_then_failure          recompute sync  sync  kv_producer  False HHHHHHHH   HHHHHHHH   PREEMPTED          112    128 violated
+  note: Owner is popped from running and _preempt_request is called, the same call schedule() makes, before the failure report. reuse_hit is get_computed_blocks before resume. resume_hit is that resume. No second external grant is offered.
+failure_then_abort                   recompute sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None violated
+  note: Failure report is applied while the owner is still running, then the owner is aborted if the fail policy did not already finish it.
+abort_then_failure                   recompute sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   FINISHED_ABORTED   112   None violated
+  note: finish_requests(ABORTED) runs before update_from_output, matching EngineCore applying the abort queue before the failure report.
+preempt_direct_then_failure          recompute sync  async kv_producer  False HHHHHHHH   HHHHHHHH   PREEMPTED          112    128 violated
+  note: Owner is popped from running and _preempt_request is called, the same call schedule() makes, before the failure report. reuse_hit is get_computed_blocks before resume. resume_hit is that resume. No second external grant is offered.
+pressure_schedule_then_failure       recompute sync  async kv_producer  False HHHHHHHH   HHHHHHHH   PREEMPTED          112    112 violated
+  note: second schedule preempted=True scheduled=[] free_blocks=8
+pressure_schedule_then_failure       recompute sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   RUNNING           None   None not_reached
+  note: second schedule preempted=False scheduled=[] free_blocks=0
+reset_running_then_failure           recompute sync  async kv_consumer  True  HHHHHHHH   HHHHHHHH   PREEMPTED          112    112 violated
+  note: reset_prefix_cache(reset_running_requests=True) is the public preemption path. reset_raised=RuntimeError: Failed to reset KV cache even when all the running requests are preempted and moved to the waiting queue. This is likely due to the presence of running requests waiting for remote KV transfer, which is not supported yet.. EngineCore.reset_prefix_cache does not catch this exception; preemption has already run. The probe continues, as a caller that observes the failed RPC would.
+reset_running_then_failure           recompute sync  sync  kv_producer  False HHHHHHHH   --------   PREEMPTED            0      0 not_applicable_reset_cleared
+  note: reset_prefix_cache(reset_running_requests=True) is the public preemption path. reset_returned=True. EngineCore.reset_prefix_cache does not catch this exception; preemption has already run. The probe continues, as a caller that observes the failed RPC would.
+reset_running_then_failure           recompute sync  sync  kv_consumer  False HHHHHHHH   --------   PREEMPTED            0      0 not_applicable_reset_cleared
+  note: reset_prefix_cache(reset_running_requests=True) is the public preemption path. reset_returned=True. EngineCore.reset_prefix_cache does not catch this exception; preemption has already run. The probe continues, as a caller that observes the failed RPC would.
+async_failure_while_waiting          recompute async sync  kv_consumer  False -------    -------    WAITING_FOR_REMOTE_KVS  None   None async_handler_saw_owner
+  note: owner_status_after_schedule=WAITING_FOR_REMOTE_KVS computed_before_report=112 Async blocks were not prefix-cached at schedule time.
+async_abort_then_failure             recompute async sync  kv_consumer  False -------    -------    FINISHED_ABORTED     0   None not_applicable_async_uncached
+  note: owner_status_after_schedule=WAITING_FOR_REMOTE_KVS computed_before_report=112
+wrote /workspace/investigation/kv-load-failure-ordering/out/main.json
