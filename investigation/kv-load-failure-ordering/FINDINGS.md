@@ -2,6 +2,8 @@
 
 Investigation only. No production change. No pull request.
 
+Follow-up design note: `DESIGN.md`. Upstream main moved from `418af607` to `179ebd9896` later the same day; none of those 9 commits touch the scheduler or KV-cache manager, so the matrix below was not rerun. The block-reuse probe in `out/aba.json` was added against `418af607`.
+
 ## SHAs
 
 | Ref | SHA | Subject |

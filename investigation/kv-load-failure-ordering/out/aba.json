@@ -1,0 +1,175 @@
+[
+  {
+    "case": "noreuse_evict_reported_block_only",
+    "policy": "fail",
+    "hash_before": "HHH-HHHH",
+    "same_prefix_hit_before": 112,
+    "same_prefix_hit_after": 48,
+    "note": "No reallocation. Evicting only the reported block breaks the full-attention hash chain, so later blocks need not be evicted to stop the hit."
+  },
+  {
+    "case": "current_report_after_reuse",
+    "policy": "fail",
+    "overlap": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "matching_ids_after_reuse": [],
+    "hash_mask": "----HHHH",
+    "same_prefix_hit": 0,
+    "reuser_prefix_hit": 64,
+    "other_status": "FINISHED_ERROR",
+    "other_computed": 64,
+    "other_ids": [
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "owner_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "note": "Production _handle_invalid_blocks runs after the physical ids belong to a different prompt."
+  },
+  {
+    "case": "current_report_after_reuse",
+    "policy": "recompute",
+    "overlap": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "matching_ids_after_reuse": [],
+    "hash_mask": "HHHHHHHH",
+    "same_prefix_hit": 0,
+    "reuser_prefix_hit": 112,
+    "other_status": "RUNNING",
+    "other_computed": 64,
+    "other_ids": [
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "owner_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "note": "Production _handle_invalid_blocks runs after the physical ids belong to a different prompt."
+  },
+  {
+    "case": "simulated_raw_id_evict",
+    "policy": "fail",
+    "overlap": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "matching_ids_after_reuse": [],
+    "hash_mask": "--------",
+    "same_prefix_hit": 0,
+    "reuser_prefix_hit": 0,
+    "other_status": "RUNNING",
+    "other_computed": 128,
+    "other_ids": [
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "owner_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "note": "Probe-only: evict every recorded physical id, including ones the new request already rehashed. Does not call update_from_output."
+  },
+  {
+    "case": "simulated_hash_match_evict",
+    "policy": "fail",
+    "overlap": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "matching_ids_after_reuse": [],
+    "hash_mask": "HHHHHHHH",
+    "same_prefix_hit": 0,
+    "reuser_prefix_hit": 112,
+    "other_status": "RUNNING",
+    "other_computed": 128,
+    "other_ids": [
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "owner_ids": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "evicted_ids": [],
+    "note": "Probe-only: evict a recorded id only while its block_hash is still the snapshot from the failed load."
+  }
+]
